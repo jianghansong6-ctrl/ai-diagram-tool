@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>发呆窗 — 休息一下</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #1a0e05;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+}
+
+/* Loading */
+#loading {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: #2d1810;
+    color: #c8a27a;
+    z-index: 1000;
+    transition: opacity 1s;
+}
+#loading.hidden { opacity: 0; pointer-events: none; }
+#loading .spinner {
+    width: 60px; height: 60px;
+    border: 3px solid #5c3a1e;
+    border-top-color: #c8a27a;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 20px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading p { font-size: 16px; letter-spacing: 2px; }
+
+/* Start overlay */
+#start-overlay {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(8px);
+    z-index: 500;
+    cursor: pointer;
+    transition: opacity 0.8s;
+}
+#start-overlay.hidden { opacity: 0; pointer-events: none; }
+#start-overlay .icon {
+    font-size: 48px; color: #e8d5b0;
+    width: 80px; height: 80px;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid #c8a27a; border-radius: 50%;
+    margin-bottom: 24px;
+    transition: transform 0.3s;
+}
+#start-overlay:hover .icon { transform: scale(1.1); }
+#start-overlay h2 { color: #e8d5b0; font-size: 20px; font-weight: 300; letter-spacing: 4px; }
+#start-overlay p { color: #a08060; font-size: 13px; margin-top: 12px; letter-spacing: 1px; }
+
+/* Scene wrapper */
+#scene-wrapper {
+    position: fixed; inset: 0;
+}
+
+/* Three.js canvas container */
+#three-container {
+    position: absolute;
+    /* Window viewport — centered, slightly smaller than screen */
+    top: 50%; left: 50%;
+    width: min(95vw, 95vh * 1.6);
+    height: min(95vh, 95vw / 1.6);
+    transform: translate(-50%, -50%);
+    border-radius: 2px;
+    overflow: hidden;
+}
+#three-container canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* Character canvas overlay — inside three-container, matches viewport */
+#char-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 2;
+}
+
+/* Window frame */
+#window-frame {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 3;
+    pointer-events: none;
+}
+.frame-part {
+    position: absolute;
+    background: linear-gradient(
+        135deg, #4a2a14 0%, #6b3a1e 30%, #8b5a2b 50%, #6b3a1e 70%, #4a2a14 100%
+    );
+}
+.frame-top    { top: 0; left: 0; right: 0; height: clamp(30px, 5vh, 60px); box-shadow: inset 0 -3px 6px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.3); }
+.frame-bottom { bottom: 0; left: 0; right: 0; height: clamp(30px, 5vh, 60px); box-shadow: inset 0 3px 6px rgba(0,0,0,0.4), 0 -2px 8px rgba(0,0,0,0.3); }
+.frame-left   { top: 0; left: 0; bottom: 0; width: clamp(20px, 3vw, 40px); box-shadow: inset -3px 0 6px rgba(0,0,0,0.4), 2px 0 8px rgba(0,0,0,0.3); }
+.frame-right  { top: 0; right: 0; bottom: 0; width: clamp(20px, 3vw, 40px); box-shadow: inset 3px 0 6px rgba(0,0,0,0.4), -2px 0 8px rgba(0,0,0,0.3); }
+
+/* Window sill */
+#sill {
+    position: absolute;
+    bottom: clamp(25px, 4vh, 50px); left: clamp(15px, 2vw, 30px);
+    right: clamp(15px, 2vw, 30px);
+    height: clamp(12px, 1.8vh, 24px);
+    background: linear-gradient(180deg, #7a4a24 0%, #5a3018 100%);
+    border-radius: 0 0 4px 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5), inset 0 1px 2px rgba(255,255,255,0.1);
+    z-index: 3;
+    pointer-events: none;
+}
+
+/* Divider (vertical center bar) */
+#divider-v {
+    position: absolute;
+    top: clamp(25px, 4vh, 50px);
+    bottom: clamp(25px, 4vh, 50px);
+    left: 50%;
+    width: clamp(8px, 1.2vw, 16px);
+    transform: translateX(-50%);
+    background: linear-gradient(90deg, #4a2a14 0%, #7a4a24 30%, #4a2a14 100%);
+    box-shadow: 0 0 6px rgba(0,0,0,0.3), inset 0 0 4px rgba(255,255,255,0.05);
+    z-index: 3;
+    pointer-events: none;
+}
+
+/* Wood grain overlay (subtle texture) */
+#wood-grain {
+    position: absolute; inset: 0;
+    z-index: 4;
+    pointer-events: none;
+    opacity: 0.06;
+    background: repeating-linear-gradient(
+        90deg, transparent, transparent 20px,
+        rgba(0,0,0,0.5) 20px, rgba(0,0,0,0.5) 21px
+    );
+}
+
+/* Weather indicator */
+#weather-info {
+    position: fixed;
+    top: 16px; right: 16px;
+    color: rgba(255,255,255,0.4);
+    font-size: 12px;
+    letter-spacing: 1px;
+    z-index: 10;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 1s;
+}
+#weather-info.show { opacity: 1; }
+
+/* Status (camera indicator) */
+#status {
+    position: fixed;
+    bottom: 16px; left: 16px;
+    color: rgba(255,255,255,0.3);
+    font-size: 11px;
+    z-index: 10;
+    pointer-events: none;
+}
+
+/* Responsive adjustments */
+@media (max-aspect-ratio: 4/3) {
+    #three-container {
+        width: min(98vw, 98vh * 1.6);
+        height: min(98vh, 98vw / 1.6);
+    }
+}
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading">
+    <div class="spinner"></div>
+    <p>正在搭建你的发呆窗口...</p>
+</div>
+
+<!-- Start overlay -->
+<div id="start-overlay">
+    <div class="icon">⛅</div>
+    <h2>打开窗户，发一会儿呆</h2>
+    <p>点击任意位置开始</p>
+</div>
+
+<!-- Main scene -->
+<div id="scene-wrapper">
+    <div id="three-container">
+        <canvas id="char-canvas"></canvas>
+        <div id="window-frame">
+            <div class="frame-part frame-top"></div>
+            <div class="frame-part frame-bottom"></div>
+            <div class="frame-part frame-left"></div>
+            <div class="frame-part frame-right"></div>
+            <div id="sill"></div>
+            <div id="divider-v"></div>
+            <div id="wood-grain"></div>
+        </div>
+    </div>
+</div>
+
+<div id="weather-info"></div>
+<div id="status"></div>
+
+<!-- ==================== SCRIPTS ==================== -->
+
+<!-- MediaPipe Pose -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+
+<!-- Three.js import map -->
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://unpkg.com/three@0.157.0/build/three.module.js"
+    }
+}
+</script>
+
+<script type="module">
+// =================================================================
+//  IMPORTS
+// =================================================================
+import * as THREE from 'three';
+
+// =================================================================
+//  DOM REFS
+// =================================================================
+const container = document.getElementById('three-container');
+const charCanvas = document.getElementById('char-canvas');
+const ctx = charCanvas.getContext('2d');
+const loadingEl = document.getElementById('loading');
+const startOverlay = document.getElementById('start-overlay');
+const weatherInfo = document.getElementById('weather-info');
+const statusEl = document.getElementById('status');
+
+// =================================================================
+//  WEATHER STATE
+// =================================================================
+const WEATHERS = ['sunny', 'cloudy', 'rainy'];
+let currentWeather = 'sunny';
+let targetWeather = 'sunny';
+let weatherTransition = 0; // 0..1
+let weatherTimer = 0;
+let nextWeatherChange = 120 + Math.random() * 180; // 2-5 min
+
+// =================================================================
+//  THREE.JS SCENE
+// =================================================================
+let scene, camera, renderer;
+let skyMesh, sunMesh, clouds = [];
+let mountainMeshes = [];
+let groundMesh;
+let rainParticles = null;
+let rainSystem;
+let cloudParticles;
+let ambientLight, dirLight;
+
+function initScene() {
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+
+    scene = new THREE.Scene();
+
+    // Lighting
+    ambientLight = new THREE.AmbientLight(0x8899bb, 0.6);
+    scene.add(ambientLight);
+    dirLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+    dirLight.position.set(10, 15, -5);
+    scene.add(dirLight);
+
+    camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 200);
+    camera.position.set(0, 3.5, 12);
+    camera.lookAt(0, 2.5, -8);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    container.appendChild(renderer.domElement);
+
+    createSky();
+    createSun();
+    createClouds();
+    createMountains();
+    createGround();
+    createRainSystem();
+    updateWeatherVisuals(1);
+
+    window.addEventListener('resize', onResize);
+}
+
+function onResize() {
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    if (renderer) renderer.setSize(w, h);
+    if (camera) { camera.aspect = w / h; camera.updateProjectionMatrix(); }
+    resizeCharCanvas();
+}
+
+function resizeCharCanvas() {
+    charCanvas.width = container.clientWidth;
+    charCanvas.height = container.clientHeight;
+}
+
+// ---- Sky ----
+function createSky() {
+    const geo = new THREE.SphereGeometry(80, 32, 32);
+    const mat = new THREE.ShaderMaterial({
+        side: THREE.BackSide,
+        uniforms: {
+            uTopColor: { value: new THREE.Color(0x4a7db4) },
+            uBottomColor: { value: new THREE.Color(0xc8d8e8) },
+            uOffset: { value: 20 },
+            uExponent: { value: 0.6 }
+        },
+        vertexShader: `
+            varying vec3 vWorldPosition;
+            void main() {
+                vec4 worldPos = modelMatrix * vec4(position, 1.0);
+                vWorldPosition = worldPos.xyz;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `,
+        fragmentShader: `
+            uniform vec3 uTopColor;
+            uniform vec3 uBottomColor;
+            uniform float uOffset;
+            uniform float uExponent;
+            varying vec3 vWorldPosition;
+            void main() {
+                float h = normalize(vWorldPosition + uOffset).y;
+                float t = max(pow(max(h, 0.0), uExponent), 0.0);
+                gl_FragColor = vec4(mix(uBottomColor, uTopColor, t), 1.0);
+            }
+        `
+    });
+    skyMesh = new THREE.Mesh(geo, mat);
+    scene.add(skyMesh);
+}
+
+// ---- Sun ----
+function createSun() {
+    const geo = new THREE.SphereGeometry(0.8, 16, 16);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffdd99 });
+    sunMesh = new THREE.Mesh(geo, mat);
+    sunMesh.position.set(5, 8, -25);
+    scene.add(sunMesh);
+
+    // Glow sprite
+    const canvas = document.createElement('canvas');
+    canvas.width = 128; canvas.height = 128;
+    const gctx = canvas.getContext('2d');
+    const grad = gctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grad.addColorStop(0, 'rgba(255,220,150,0.8)');
+    grad.addColorStop(0.2, 'rgba(255,220,150,0.4)');
+    grad.addColorStop(0.5, 'rgba(255,220,150,0.1)');
+    grad.addColorStop(1, 'rgba(255,220,150,0)');
+    gctx.fillStyle = grad;
+    gctx.fillRect(0, 0, 128, 128);
+    const tex = new THREE.CanvasTexture(canvas);
+    const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true, blending: THREE.AdditiveBlending });
+    const sprite = new THREE.Sprite(spriteMat);
+    sprite.scale.set(8, 8, 1);
+    sprite.position.copy(sunMesh.position);
+    scene.add(sprite);
+    sunMesh.userData.glowSprite = sprite;
+}
+
+// ---- Clouds ----
+function createClouds() {
+    const cloudMat = new THREE.MeshLambertMaterial({
+        color: 0xf0f0f0,
+        transparent: true,
+        opacity: 0.9
+    });
+
+    for (let i = 0; i < 12; i++) {
+        const group = new THREE.Group();
+        const numParts = 3 + Math.floor(Math.random() * 4);
+        for (let j = 0; j < numParts; j++) {
+            const r = 0.6 + Math.random() * 1.2;
+            const sphere = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 8), cloudMat);
+            sphere.position.set(
+                (Math.random() - 0.5) * 2.5,
+                (Math.random() - 0.5) * 0.6,
+                (Math.random() - 0.5) * 1.5
+            );
+            sphere.scale.y = 0.6;
+            group.add(sphere);
+        }
+        group.position.set(
+            (Math.random() - 0.5) * 50,
+            5 + Math.random() * 5,
+            -(15 + Math.random() * 25)
+        );
+        group.userData = {
+            speed: 0.02 + Math.random() * 0.04,
+            driftX: (Math.random() - 0.5) * 20,
+            baseX: group.position.x
+        };
+        scene.add(group);
+        clouds.push(group);
+    }
+}
+
+// ---- Mountains ----
+function createMountains() {
+    // Far mountain range
+    const mGeo1 = new THREE.PlaneGeometry(50, 20, 80, 40);
+    mGeo1.rotateX(-Math.PI / 2);
+    const pos1 = mGeo1.attributes.position;
+    for (let i = 0; i < pos1.count; i++) {
+        const x = pos1.getX(i);
+        const z = pos1.getZ(i);
+        let h = mountainNoise(x * 0.12, z * 0.15) * 3.5;
+        h += mountainNoise(x * 0.05, z * 0.06) * 2;
+        h = Math.max(h, -0.5);
+        pos1.setY(i, h);
+    }
+    mGeo1.computeVertexNormals();
+    const mMat1 = new THREE.MeshLambertMaterial({
+        color: 0x5a7d5a,
+        flatShading: true,
+        side: THREE.DoubleSide
+    });
+    const m1 = new THREE.Mesh(mGeo1, mMat1);
+    m1.position.set(0, 0, -20);
+    scene.add(m1);
+    mountainMeshes.push(m1);
+
+    // Nearer hills
+    const mGeo2 = new THREE.PlaneGeometry(40, 12, 60, 30);
+    mGeo2.rotateX(-Math.PI / 2);
+    const pos2 = mGeo2.attributes.position;
+    for (let i = 0; i < pos2.count; i++) {
+        const x = pos2.getX(i);
+        const z = pos2.getZ(i);
+        let h = mountainNoise(x * 0.18, z * 0.2) * 2.0;
+        h += mountainNoise(x * 0.08, z * 0.09) * 1.2;
+        h = Math.max(h, -0.3);
+        pos2.setY(i, h);
+    }
+    mGeo2.computeVertexNormals();
+    const mMat2 = new THREE.MeshLambertMaterial({
+        color: 0x6b8e4a,
+        flatShading: true,
+        side: THREE.DoubleSide
+    });
+    const m2 = new THREE.Mesh(mGeo2, mMat2);
+    m2.position.set(0, -0.2, -10);
+    scene.add(m2);
+    mountainMeshes.push(m2);
+}
+
+function mountainNoise(x, z) {
+    return Math.sin(x * 1.3 + z * 0.7) * 0.5
+         + Math.sin(x * 2.1 - z * 1.5) * 0.3
+         + Math.sin(x * 0.5 + z * 0.9) * 0.7;
+}
+
+// ---- Ground ----
+function createGround() {
+    const geo = new THREE.PlaneGeometry(50, 18, 40, 20);
+    geo.rotateX(-Math.PI / 2);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const z = pos.getZ(i);
+        const h = (mountainNoise(x * 0.3, z * 0.4) * 0.3);
+        pos.setY(i, h - 0.1);
+    }
+    geo.computeVertexNormals();
+    const mat = new THREE.MeshLambertMaterial({
+        color: 0x5a8a3a,
+        flatShading: true,
+        side: THREE.DoubleSide
+    });
+    groundMesh = new THREE.Mesh(geo, mat);
+    groundMesh.position.set(0, -0.3, -6);
+    scene.add(groundMesh);
+}
+
+// ---- Rain ----
+function createRainSystem() {
+    const count = 3000;
+    const positions = new Float32Array(count * 3);
+    const velocities = new Float32Array(count);
+    const geo = new THREE.BufferGeometry();
+    for (let i = 0; i < count; i++) {
+        positions[i * 3] = (Math.random() - 0.5) * 40;
+        positions[i * 3 + 1] = Math.random() * 15 + 2;
+        positions[i * 3 + 2] = -(Math.random() * 25 + 3);
+        velocities[i] = 8 + Math.random() * 6;
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const mat = new THREE.PointsMaterial({
+        color: 0xaabbcc,
+        size: 0.08,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending
+    });
+    rainSystem = new THREE.Points(geo, mat);
+    rainSystem.userData.velocities = velocities;
+    scene.add(rainSystem);
+}
+
+// =================================================================
+//  WEATHER VISUALS UPDATE
+// =================================================================
+function updateWeatherVisuals(t) {
+    if (!scene) return;
+    const weather = targetWeather;
+
+    // Sky colors
+    let topColor, bottomColor, sunOpacity, rainOpacity, lightIntensity, fogDensity;
+    if (weather === 'sunny') {
+        topColor = new THREE.Color(0x3a7bc8);
+        bottomColor = new THREE.Color(0xa8d4f0);
+        sunOpacity = 1;
+        rainOpacity = 0;
+        lightIntensity = 1.2;
+        fogDensity = 0;
+    } else if (weather === 'cloudy') {
+        topColor = new THREE.Color(0x7a8a9a);
+        bottomColor = new THREE.Color(0xb8c8d8);
+        sunOpacity = 0.3;
+        rainOpacity = 0;
+        lightIntensity = 0.7;
+        fogDensity = 0.01;
+    } else { // rainy
+        topColor = new THREE.Color(0x4a5566);
+        bottomColor = new THREE.Color(0x7a8a9a);
+        sunOpacity = 0;
+        rainOpacity = 0.7;
+        lightIntensity = 0.4;
+        fogDensity = 0.025;
+    }
+
+    if (skyMesh) {
+        skyMesh.material.uniforms.uTopColor.value.lerp(topColor, 0.05);
+        skyMesh.material.uniforms.uBottomColor.value.lerp(bottomColor, 0.05);
+    }
+
+    if (sunMesh) {
+        sunMesh.material.opacity = sunMesh.material.opacity || 1;
+        sunMesh.material.transparent = true;
+        sunMesh.material.opacity += (sunOpacity - sunMesh.material.opacity) * 0.05;
+        if (sunMesh.userData.glowSprite) {
+            sunMesh.userData.glowSprite.material.opacity = sunOpacity * 0.6;
+        }
+    }
+
+    if (rainSystem) {
+        rainSystem.material.opacity += (rainOpacity - rainSystem.material.opacity) * 0.05;
+    }
+
+    // Cloud color
+    const cloudColor = weather === 'rainy' ? 0x889098 : (weather === 'cloudy' ? 0xe0e4e8 : 0xf0f0f0);
+    clouds.forEach(c => {
+        c.children.forEach(s => {
+            s.material.color.lerp(new THREE.Color(cloudColor), 0.03);
+        });
+    });
+
+    // Fog
+    if (weather === 'rainy') {
+        scene.fog = new THREE.FogExp2(0x7a8a9a, 0.025);
+    } else if (weather === 'cloudy') {
+        scene.fog = new THREE.FogExp2(0xb8c8d8, 0.01);
+    } else {
+        scene.fog = null;
+    }
+
+    // Directional light
+    dirLight.intensity += (lightIntensity - dirLight.intensity) * 0.05;
+    const lightColor = weather === 'rainy' ? new THREE.Color(0x8899bb) : new THREE.Color(0xffeedd);
+    dirLight.color.lerp(lightColor, 0.05);
+
+    // Ground color
+    let gColor;
+    if (weather === 'rainy') gColor = 0x4a7a2a;
+    else if (weather === 'cloudy') gColor = 0x5a8a3a;
+    else gColor = 0x6a9a4a;
+    if (groundMesh) {
+        groundMesh.material.color.lerp(new THREE.Color(gColor), 0.03);
+    }
+}
+
+// =================================================================
+//  AUDIO ENGINE (Procedural)
+// =================================================================
+class AudioEngine {
+    constructor() {
+        this.ctx = null;
+        this.initialized = false;
+        this.targetWeather = 'sunny';
+        this.sources = [];
+        this.windGain = null;
+        this.rainGain = null;
+        this.grassGain = null;
+        this.rainGrassGain = null;
+        this.active = false;
+    }
+
+    async init() {
+        if (this.initialized) return;
+        try {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            await this.ctx.resume();
+            this.initialized = true;
+            this.setup();
+        } catch (e) {
+            console.warn('Audio init failed:', e);
+        }
+    }
+
+    setup() {
+        // Create gain nodes
+        this.windGain = this.ctx.createGain();
+        this.windGain.gain.value = 0;
+        this.windGain.connect(this.ctx.destination);
+
+        this.rainGain = this.ctx.createGain();
+        this.rainGain.gain.value = 0;
+        this.rainGain.connect(this.ctx.destination);
+
+        this.grassGain = this.ctx.createGain();
+        this.grassGain.gain.value = 0;
+        this.grassGain.connect(this.ctx.destination);
+
+        this.rainGrassGain = this.ctx.createGain();
+        this.rainGrassGain.gain.value = 0;
+        this.rainGrassGain.connect(this.ctx.destination);
+
+        // Wind
+        this.createSound((src) => {
+            const hp = this.ctx.createBiquadFilter();
+            hp.type = 'highpass'; hp.frequency.value = 80;
+            const lp = this.ctx.createBiquadFilter();
+            lp.type = 'lowpass'; lp.frequency.value = 400; lp.Q.value = 0.5;
+            src.connect(hp); hp.connect(lp); lp.connect(this.windGain);
+            this.modulateFilter(lp.frequency, 200, 600, 0.08);
+        });
+
+        // Rain
+        this.createSound((src) => {
+            const hp = this.ctx.createBiquadFilter();
+            hp.type = 'highpass'; hp.frequency.value = 300;
+            const lp = this.ctx.createBiquadFilter();
+            lp.type = 'lowpass'; lp.frequency.value = 2000;
+            src.connect(hp); hp.connect(lp); lp.connect(this.rainGain);
+        });
+
+        // Grass rustle
+        this.createSound((src) => {
+            const bp = this.ctx.createBiquadFilter();
+            bp.type = 'bandpass'; bp.frequency.value = 1200; bp.Q.value = 1.0;
+            src.connect(bp); bp.connect(this.grassGain);
+            this.modulateFilter(bp.frequency, 800, 1800, 0.12);
+        });
+
+        // Rain on grass
+        this.createSound((src) => {
+            const hp = this.ctx.createBiquadFilter();
+            hp.type = 'highpass'; hp.frequency.value = 500;
+            const lp = this.ctx.createBiquadFilter();
+            lp.type = 'lowpass'; lp.frequency.value = 3000;
+            src.connect(hp); hp.connect(lp); lp.connect(this.rainGrassGain);
+        });
+
+        this.active = true;
+    }
+
+    createSound(routeFn) {
+        const bufferSize = this.ctx.sampleRate * 2;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+        const src = this.ctx.createBufferSource();
+        src.buffer = buffer;
+        src.loop = true;
+        routeFn(src);
+        src.start();
+    }
+
+    modulateFilter(param, min, max, speed) {
+        const mod = () => {
+            const val = min + (max - min) * (0.5 + 0.5 * Math.sin(this.ctx.currentTime * speed * 2 * Math.PI));
+            param.setTargetAtTime(val, this.ctx.currentTime, 0.5);
+            setTimeout(mod, 100 + Math.random() * 200);
+        };
+        mod();
+    }
+
+    setWeather(weather) {
+        this.targetWeather = weather;
+    }
+
+    update() {
+        if (!this.active || !this.ctx) return;
+
+        const weather = this.targetWeather;
+
+        let windTarget = 0, rainTarget = 0, grassTarget = 0, rainGrassTarget = 0;
+
+        if (weather === 'sunny') {
+            windTarget = 0.04;
+            grassTarget = 0.06;
+        } else if (weather === 'cloudy') {
+            windTarget = 0.08;
+            grassTarget = 0.10;
+        } else if (weather === 'rainy') {
+            windTarget = 0.06;
+            rainTarget = 0.15;
+            rainGrassTarget = 0.08;
+            grassTarget = 0.03;
+        }
+
+        const t = this.ctx.currentTime;
+        this.windGain.gain.setTargetAtTime(windTarget, t, 0.5);
+        this.rainGain.gain.setTargetAtTime(rainTarget, t, 0.5);
+        this.grassGain.gain.setTargetAtTime(grassTarget, t, 0.5);
+        this.rainGrassGain.gain.setTargetAtTime(rainGrassTarget, t, 0.5);
+    }
+}
+
+// =================================================================
+//  POSE DETECTION
+// =================================================================
+let poseLandmarks = null;
+let poseDetected = false;
+let poseDetectionActive = false;
+let webcamStream = null;
+
+async function setupPoseDetection() {
+    if (typeof Pose === 'undefined') {
+        statusEl.textContent = '⚠ 姿态检测库未加载';
+        return;
+    }
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: 320, height: 240, facingMode: 'user' }
+        });
+        webcamStream = stream;
+
+        const video = document.createElement('video');
+        video.width = 320;
+        video.height = 240;
+        video.srcObject = stream;
+        video.play();
+
+        const pose = new Pose({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+            }
+        });
+
+        pose.setOptions({
+            modelComplexity: 0, // lite
+            smoothLandmarks: true,
+            enableSegmentation: false,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+
+        pose.onResults((results) => {
+            if (results.poseLandmarks) {
+                poseLandmarks = results.poseLandmarks;
+                poseDetected = true;
+            } else {
+                poseDetected = false;
+            }
+        });
+
+        poseDetectionActive = true;
+        statusEl.textContent = '📷 摄像头已启动';
+
+        // Send frames
+        const sendFrame = async () => {
+            if (!poseDetectionActive) return;
+            try {
+                await pose.send({ image: video });
+            } catch (e) {
+                // ignore
+            }
+            setTimeout(sendFrame, 100); // ~10 fps
+        };
+        setTimeout(sendFrame, 500);
+    } catch (e) {
+        statusEl.textContent = '📷 摄像头不可用（角色将自动动作）';
+        console.warn('Camera not available:', e);
+    }
+}
+
+// =================================================================
+//  CHARACTER RENDERER
+// =================================================================
+const characters = [];
+const CHAR_W = 50;
+const CHAR_H = 100;
+
+class Character {
+    constructor(index, x, y) {
+        this.index = index;
+        this.baseX = x;
+        this.y = y;
+        this.x = x;
+        this.walkPhase = index * 2.1;
+        this.walkSpeed = 0.6 + index * 0.15;
+        this.walkRange = 30 + index * 5;
+        this.direction = index % 2 === 0 ? 1 : -1;
+        this.bodyColor = ['#e05050', '#5090e0', '#50c050'][index % 3];
+        this.pose = this.getDefaultPose();
+    }
+
+    getDefaultPose() {
+        return {
+            head: { x: 0, y: -48 },
+            neck: { x: 0, y: -36 },
+            lShoulder: { x: -8, y: -34 },
+            rShoulder: { x: 8, y: -34 },
+            lElbow: { x: -12, y: -24 },
+            rElbow: { x: 12, y: -24 },
+            lHand: { x: -14, y: -14 },
+            rHand: { x: 14, y: -14 },
+            lHip: { x: -5, y: -14 },
+            rHip: { x: 5, y: -14 },
+            lKnee: { x: -6, y: 4 },
+            rKnee: { x: 6, y: 4 },
+            lFoot: { x: -7, y: 20 },
+            rFoot: { x: 7, y: 20 }
+        };
+    }
+
+    update(dt, poseData) {
+        // Walk back and forth
+        this.walkPhase += dt * this.walkSpeed * this.direction;
+        const walkOffset = Math.sin(this.walkPhase) * this.walkRange;
+        this.x = this.baseX + walkOffset;
+
+        // Bounce
+        const bounce = Math.abs(Math.sin(this.walkPhase * 1.5)) * 2;
+
+        // Build pose
+        const p = this.getDefaultPose();
+
+        if (poseData && poseDetected) {
+            // Map pose landmarks to character
+            this.mapPoseToCharacter(poseData, p);
+        } else {
+            // Idle arm sway
+            const armSwing = Math.sin(this.walkPhase * 2) * 8;
+            p.lHand.x += armSwing;
+            p.rHand.x -= armSwing;
+            p.lElbow.x += armSwing * 0.5;
+            p.rElbow.x -= armSwing * 0.5;
+        }
+
+        // Apply bounce
+        p.head.y += bounce * 0.3;
+        p.neck.y += bounce * 0.2;
+
+        // Walking leg movement
+        const legSwing = Math.sin(this.walkPhase * 1.5) * 6;
+        p.lKnee.x += legSwing;
+        p.rKnee.x -= legSwing;
+        p.lFoot.x += legSwing * 1.3;
+        p.rFoot.x -= legSwing * 1.3;
+
+        this.pose = p;
+    }
+
+    mapPoseToCharacter(landmarks, targetPose) {
+        if (!landmarks || landmarks.length < 33) return;
+
+        const scale = 0.55;
+        const cx = 0;
+        const cy = -10;
+
+        // Helper: landmark index to character space
+        const lm = (idx) => {
+            if (!landmarks[idx]) return { x: 0, y: 0 };
+            return {
+                x: (landmarks[idx].x - 0.5) * 80 * scale,
+                y: (0.5 - landmarks[idx].y) * 100 * scale + cy
+            };
+        };
+
+        // Only map landmarks that have reasonable confidence
+        const nose = lm(0);
+        const lSh = lm(11);
+        const rSh = lm(12);
+        const lEl = lm(13);
+        const rEl = lm(14);
+        const lWr = lm(15);
+        const rWr = lm(16);
+        const lHp = lm(23);
+        const rHp = lm(24);
+        const lKn = lm(25);
+        const rKn = lm(26);
+        const lAn = lm(27);
+        const rAn = lm(28);
+
+        // Only apply if detected and reasonable
+        if (landmarks[0] && landmarks[0].visibility > 0.5) {
+            targetPose.head = { x: nose.x, y: nose.y - 10 };
+        }
+        if (landmarks[11] && landmarks[11].visibility > 0.5) {
+            targetPose.lShoulder = { x: lSh.x - 2, y: lSh.y };
+        }
+        if (landmarks[12] && landmarks[12].visibility > 0.5) {
+            targetPose.rShoulder = { x: rSh.x + 2, y: rSh.y };
+        }
+
+        const shY = (lSh.y + rSh.y) / 2;
+        const neckY = (nose.y + shY) / 2;
+
+        if (landmarks[13] && landmarks[13].visibility > 0.5) {
+            targetPose.lElbow = { x: lEl.x, y: lEl.y };
+        }
+        if (landmarks[14] && landmarks[14].visibility > 0.5) {
+            targetPose.rElbow = { x: rEl.x, y: rEl.y };
+        }
+        if (landmarks[15] && landmarks[15].visibility > 0.5) {
+            targetPose.lHand = { x: lWr.x, y: lWr.y };
+        }
+        if (landmarks[16] && landmarks[16].visibility > 0.5) {
+            targetPose.rHand = { x: rWr.x, y: rWr.y };
+        }
+        if (landmarks[23] && landmarks[23].visibility > 0.5) {
+            targetPose.lHip = { x: lHp.x, y: lHp.y };
+        }
+        if (landmarks[24] && landmarks[24].visibility > 0.5) {
+            targetPose.rHip = { x: rHp.x, y: rHp.y };
+        }
+
+        // Legs - keep some walking motion
+        const legSwing = Math.sin(this.walkPhase * 1.5) * 3;
+        if (landmarks[25] && landmarks[25].visibility > 0.3) {
+            targetPose.lKnee = { x: lKn.x + legSwing * 0.3, y: lKn.y };
+        }
+        if (landmarks[26] && landmarks[26].visibility > 0.3) {
+            targetPose.rKnee = { x: rKn.x - legSwing * 0.3, y: rKn.y };
+        }
+        if (landmarks[27] && landmarks[27].visibility > 0.3) {
+            targetPose.lFoot = { x: lAn.x + legSwing * 0.5, y: lAn.y };
+        }
+        if (landmarks[28] && landmarks[28].visibility > 0.3) {
+            targetPose.rFoot = { x: rAn.x - legSwing * 0.5, y: rAn.y };
+        }
+
+        // Clamp to reasonable area
+        for (const key of Object.keys(targetPose)) {
+            targetPose[key].x = Math.max(-30, Math.min(30, targetPose[key].x));
+            targetPose[key].y = Math.max(-55, Math.min(25, targetPose[key].y));
+        }
+    }
+
+    draw(ctx, screenX, screenY, scale) {
+        const p = this.pose;
+        const s = scale;
+
+        ctx.save();
+        ctx.translate(screenX, screenY);
+
+        // Draw shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.beginPath();
+        ctx.ellipse(0, 24 * s, 15 * s, 4 * s, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // ------- Draw body parts -------
+        const lw = 3 * s;
+
+        // Function to draw a limb segment
+        const drawLimb = (x1, y1, x2, y2, color, width) => {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width || lw;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        };
+
+        const bodyColor = this.bodyColor;
+        const darkColor = this.adjustBrightness(bodyColor, -30);
+        const skinColor = '#f0d0a0';
+
+        // Legs
+        drawLimb(p.lHip.x, p.lHip.y, p.lKnee.x, p.lKnee.y, darkColor, lw * 1.2);
+        drawLimb(p.rHip.x, p.rHip.y, p.rKnee.x, p.rKnee.y, darkColor, lw * 1.2);
+        drawLimb(p.lKnee.x, p.lKnee.y, p.lFoot.x, p.lFoot.y, darkColor, lw * 1.0);
+        drawLimb(p.rKnee.x, p.rKnee.y, p.rFoot.x, p.rFoot.y, darkColor, lw * 1.0);
+
+        // Body (torso)
+        ctx.fillStyle = bodyColor;
+        ctx.beginPath();
+        ctx.moveTo(p.lShoulder.x, p.lShoulder.y);
+        ctx.lineTo(p.rShoulder.x, p.rShoulder.y);
+        ctx.lineTo(p.rHip.x, p.rHip.y);
+        ctx.lineTo(p.lHip.x, p.lHip.y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = darkColor;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Arms
+        drawLimb(p.lShoulder.x, p.lShoulder.y, p.lElbow.x, p.lElbow.y, skinColor, lw * 0.9);
+        drawLimb(p.rShoulder.x, p.rShoulder.y, p.rElbow.x, p.rElbow.y, skinColor, lw * 0.9);
+        drawLimb(p.lElbow.x, p.lElbow.y, p.lHand.x, p.lHand.y, skinColor, lw * 0.8);
+        drawLimb(p.rElbow.x, p.rElbow.y, p.rHand.x, p.rHand.y, skinColor, lw * 0.8);
+
+        // Hands
+        ctx.fillStyle = skinColor;
+        [p.lHand, p.rHand].forEach(h => {
+            ctx.beginPath();
+            ctx.arc(h.x, h.y, 2.5 * s, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // Neck
+        drawLimb(p.neck.x, p.neck.y, (p.lShoulder.x + p.rShoulder.x) / 2,
+            (p.lShoulder.y + p.rShoulder.y) / 2, skinColor, lw * 0.7);
+
+        // Head
+        ctx.fillStyle = skinColor;
+        ctx.beginPath();
+        ctx.arc(p.head.x, p.head.y, 10 * s, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Hair
+        ctx.fillStyle = '#4a3520';
+        ctx.beginPath();
+        ctx.ellipse(p.head.x, p.head.y - 3 * s, 10 * s, 7 * s, 0, Math.PI, 0);
+        ctx.fill();
+
+        // Eyes
+        ctx.fillStyle = '#2a1a0a';
+        ctx.beginPath();
+        ctx.arc(p.head.x - 3.5 * s, p.head.y + 1 * s, 1.2 * s, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(p.head.x + 3.5 * s, p.head.y + 1 * s, 1.2 * s, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Eye shine
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.beginPath();
+        ctx.arc(p.head.x - 3 * s, p.head.y, 0.5 * s, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(p.head.x + 4 * s, p.head.y, 0.5 * s, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Mouth (smile)
+        ctx.strokeStyle = '#c07070';
+        ctx.lineWidth = 1.2 * s;
+        ctx.beginPath();
+        ctx.arc(p.head.x, p.head.y + 4 * s, 3 * s, 0.1, Math.PI - 0.1);
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
+    adjustBrightness(hex, amt) {
+        let r = parseInt(hex.slice(1, 3), 16);
+        let g = parseInt(hex.slice(3, 5), 16);
+        let b = parseInt(hex.slice(5, 7), 16);
+        r = Math.max(0, Math.min(255, r + amt));
+        g = Math.max(0, Math.min(255, g + amt));
+        b = Math.max(0, Math.min(255, b + amt));
+        return `rgb(${r},${g},${b})`;
+    }
+}
+
+function initCharacters() {
+    const count = 3;
+    for (let i = 0; i < count; i++) {
+        const x = (i - (count - 1) / 2) * 80;
+        const y = 0;
+        characters.push(new Character(i, x, y));
+    }
+}
+
+function drawCharacters(timestamp) {
+    const w = charCanvas.width;
+    const h = charCanvas.height;
+
+    ctx.clearRect(0, 0, w, h);
+
+    const dt = Math.min(0.05, (timestamp - (lastCharTime || timestamp)) / 1000);
+    lastCharTime = timestamp;
+
+    // Character positions at the bottom of the viewport
+    const baseY = h - 55; // Just above window sill
+    const scale = Math.min(1, w / 1200);
+
+    // Build pose data array from landmarks
+    let poseData = null;
+    if (poseLandmarks && poseDetected) {
+        poseData = poseLandmarks;
+    }
+
+    characters.forEach((char, i) => {
+        char.update(dt, poseData);
+        const screenX = w / 2 + char.x * scale;
+        const screenY = baseY;
+        char.draw(ctx, screenX, screenY, scale);
+    });
+}
+
+let lastCharTime = null;
+
+// =================================================================
+//  WEATHER LOGIC
+// =================================================================
+function updateWeather(dt) {
+    weatherTimer += dt;
+
+    if (weatherTimer >= nextWeatherChange) {
+        weatherTimer = 0;
+        nextWeatherChange = 120 + Math.random() * 180;
+
+        // Pick a new weather different from current
+        const options = WEATHERS.filter(w => w !== currentWeather);
+        targetWeather = options[Math.floor(Math.random() * options.length)];
+        weatherInfo.textContent = targetWeather === 'sunny' ? '☀ 晴天'
+            : targetWeather === 'cloudy' ? '⛅ 多云' : '🌧 雨天';
+        weatherInfo.classList.add('show');
+    }
+
+    // Transition
+    if (currentWeather !== targetWeather) {
+        weatherTransition += dt / 10; // 10 second transition
+        if (weatherTransition >= 1) {
+            weatherTransition = 1;
+            currentWeather = targetWeather;
+        }
+    }
+
+    // Update visuals
+    updateWeatherVisuals(dt);
+
+    // Update audio
+    if (audioEngine) {
+        audioEngine.setWeather(targetWeather);
+        audioEngine.update();
+    }
+}
+
+// =================================================================
+//  MAIN LOOP
+// =================================================================
+let lastTime = 0;
+
+function animate(time) {
+    requestAnimationFrame(animate);
+
+    const dt = Math.min(0.05, (time - lastTime) / 1000);
+    lastTime = time;
+
+    if (!scene) return;
+
+    // Update weather
+    updateWeather(dt);
+
+    // Move clouds
+    clouds.forEach(c => {
+        c.position.x += c.userData.speed * dt * 5;
+        if (c.position.x > c.userData.baseX + 30) {
+            c.position.x = c.userData.baseX - 30;
+        }
+    });
+
+    // Update rain
+    if (rainSystem) {
+        const positions = rainSystem.geometry.attributes.position;
+        const vel = rainSystem.userData.velocities;
+        for (let i = 0; i < positions.count; i++) {
+            positions.array[i * 3 + 1] -= vel[i] * dt * (currentWeather === 'rainy' ? 1 : 0.3);
+            if (positions.array[i * 3 + 1] < -1) {
+                positions.array[i * 3 + 1] = 12 + Math.random() * 5;
+                positions.array[i * 3] = (Math.random() - 0.5) * 40;
+            }
+        }
+        positions.needsUpdate = true;
+    }
+
+    // Draw characters
+    drawCharacters(time);
+
+    // Render scene
+    renderer.render(scene, camera);
+}
+
+// =================================================================
+//  INIT
+// =================================================================
+let audioEngine = null;
+
+async function init() {
+    // Hide loading after a moment
+    setTimeout(() => loadingEl.classList.add('hidden'), 500);
+
+    // Start overlay click handler
+    startOverlay.addEventListener('click', async () => {
+        startOverlay.classList.add('hidden');
+
+        // Init audio
+        audioEngine = new AudioEngine();
+        await audioEngine.init();
+
+        // Init scene
+        initScene();
+        resizeCharCanvas();
+
+        // Init characters
+        initCharacters();
+
+        // Start pose detection
+        setupPoseDetection();
+
+        // Start animation
+        requestAnimationFrame(animate);
+
+        // Hide weather info initially
+        weatherInfo.classList.remove('show');
+    });
+}
+
+// Start
+init();
+</script>
+</body>
+</html>

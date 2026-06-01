@@ -1,0 +1,15 @@
+INFO:     Started server process [25580]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:49747 - "GET /api/history HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49764 - "GET /api/history HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61902 - "GET /api/history HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61904 - "GET /api/history HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65490 - "GET /api/history/f4dfbe1e HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51078 - "GET /api/history/ada105da HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55625 - "GET /api/history/437e95fb HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64154 - "GET /api/history/cd0257ea HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59112 - "GET /api/history/8c5f4256 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57986 - "POST /api/parse-document HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59313 - "POST /api/generate HTTP/1.1" 200 OK
