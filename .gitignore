@@ -21,3 +21,8 @@ Thumbs.db
 .venv/
 backend/__pycache__/
 .claude/
+*.log
+data/
+daydream-window.html
+_fix_*.py
+_fix_*.cjs
